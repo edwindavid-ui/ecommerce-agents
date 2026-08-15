@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from app.db.mongodb import user_collection
+from app.db.mongodb import ping_db
 
 from app.api.auth import router as auth_router
 from app.api.buyer_agents import router as buyer_agents_router
@@ -30,6 +31,16 @@ def read_root():
 
 
 @app.get("/health")
-def health_check():
-    logger.info("Health check requested")
-    return {"status": "ok"}
+async def health_check():
+    is_db_up = await ping_db()
+    if is_db_up:
+        logger.info("Health check requested")
+        return {
+            "status": "ok",
+            "database_status": "up",
+                }
+    else:
+        raise HTTPException(
+            status_code=503,
+            detail="Database is down"
+        )

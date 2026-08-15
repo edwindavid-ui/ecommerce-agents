@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
+from app.auth.deps import get_current_user
+from app.db.mongodb import database
 
 from app.db.repositories.products import ProductRepository
 from app.db.repositories.recommendations import RecommendationRepository
@@ -11,12 +13,10 @@ from app.services.seller_service import SellerService, InventoryService
 
 router = APIRouter(tags=["products", "sellers", "inventory", "recommendations"])
 
-# Initialize repositories and services
-# In a real app, these would come from dependency injection and use real MongoDB
-product_repo = ProductRepository(collection=None)
-seller_repo = SellerRepository(collection=None)
-inventory_repo = InventoryRepository(collection=None)
-rec_repo = RecommendationRepository(collection=None)
+product_repo = ProductRepository(collection=database.get_collection("products"))
+seller_repo = SellerRepository(collection=database.get_collection("sellers"))
+inventory_repo = InventoryRepository(collection=database.get_collection("inventory"))
+rec_repo = RecommendationRepository(collection=database.get_collection("recommendations"))
 
 seller_service = SellerService(seller_repo)
 inventory_service = InventoryService(inventory_repo)
@@ -31,23 +31,18 @@ async def list_products(category: str = None, max_price: float = None):
 
 @router.post("/products", status_code=status.HTTP_201_CREATED)
 async def create_product(payload: ProductCreate):
-    # In a real implementation, we'd verify seller ownership via auth context
+    product_dict = payload.model_dump()
+    created_product = await product_repo.create_product(product_dict)
     return {
-        "id": f"prod_{hash(payload.name) % 10000}",
-        "name": payload.name,
-        "category": payload.category,
-        "price": payload.price,
-        "seller_id": payload.seller_id,
-        "status": payload.status,
+        "message": "Product created successfully",
+        "product": created_product
     }
 
 
 @router.post("/sellers/me", status_code=status.HTTP_201_CREATED)
-async def create_seller_profile(payload: SellerCreate):
-    # In real app, user_id comes from auth token
-    user_id = "current_user"
+async def create_seller_profile(payload: SellerCreate, current_user_id: str = Depends(get_current_user)):
     try:
-        seller = await seller_service.create_seller(user_id, payload)
+        seller = await seller_service.create_seller(current_user_id, payload)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return seller

@@ -1,29 +1,39 @@
 from datetime import datetime, timedelta, timezone
-
+from app.db.mongodb import user_collection
+from passlib.context import CryptContext
 from app.schemas.user import UserCreate, UserLogin
 
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
 class AuthService:
-    def __init__(self):
-        self._users: dict[str, dict] = {}
-
-    def register_user(self, user_data: UserCreate) -> dict:
+    async def register_user(self, user_data: UserCreate) -> dict:
         email = str(user_data.email)
-        if email in self._users:
+
+        existing_user = await user_collection.find_one({"email": email})
+        if existing_user:
             raise ValueError("User already exists")
 
+        hashed_password = get_password_hash(user_data.password)
+
         user = {
-            "id": f"user_{len(self._users) + 1}",
             "name": user_data.name,
             "email": email,
             "role": user_data.role,
-            "password": user_data.password,
+            "password": hashed_password,
         }
-        self._users[email] = user
+
+        result = await user_collection.insert_one(user)
 
         return {
+            "message": "User registered successfully",
             "user": {
-                "id": user["id"],
+                "id": str(result.inserted_id),
                 "name": user["name"],
                 "email": user["email"],
                 "role": user["role"],
@@ -32,15 +42,15 @@ class AuthService:
             "token_type": "bearer",
         }
 
-    def login_user(self, login_data: UserLogin) -> dict:
+    async def login_user(self, login_data: UserLogin) -> dict:
         email = str(login_data.email)
-        user = self._users.get(email)
-        if user is None or user["password"] != login_data.password:
+        user = await user_collection.find_one({"email": email})
+        if user is None or not verify_password(login_data.password, user["password"]):
             raise ValueError("Invalid credentials")
 
         return {
             "user": {
-                "id": user["id"],
+                "id": str(user["_id"]),
                 "name": user["name"],
                 "email": user["email"],
                 "role": user["role"],
@@ -51,4 +61,5 @@ class AuthService:
 
     def _create_token(self, user: dict) -> str:
         expiry = datetime.now(timezone.utc) + timedelta(hours=1)
-        return f"token_{user['id']}_{expiry.strftime('%Y%m%d%H%M%S')}" 
+        user_id = str(user["_id"])
+        return f"token_for_{user_id}_expires_at_{expiry.isoformat()}"

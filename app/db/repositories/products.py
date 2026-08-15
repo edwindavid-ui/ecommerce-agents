@@ -18,4 +18,10 @@ class ProductRepository:
 
     async def list_products(self, category: str | None = None, max_price: float | None = None):
         query = self.build_filters(category=category, max_price=max_price)
-        return self.collection.find(query)
+        cursor = self.collection.find(query)
+        return await cursor.to_list(length=100)  # Limit to 100 results for simplicity
+
+    async def create_product(self, product_dict: dict) -> dict:
+        result = await self.collection.insert_one(product_dict)
+        product_dict["id"] = str(result.inserted_id)
+        return product_dict
