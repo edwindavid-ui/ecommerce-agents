@@ -25,9 +25,8 @@ recommendation_service = RecommendationService(product_repo, rec_repo)
 
 @router.get("/products")
 async def list_products(category: str = None, max_price: float = None):
-    filters = product_repo.build_filters(category=category, max_price=max_price)
-    return {"filters": filters, "results": []}
-
+    products = await product_repo.list_products(category=category, max_price=max_price)
+    return {"results": products}
 
 @router.post("/products", status_code=status.HTTP_201_CREATED)
 async def create_product(payload: ProductCreate):

@@ -3,31 +3,25 @@ class ProductRepository:
     def __init__(self, collection):
         self.collection = collection
 
-    async def list_products(
-        self,
-        category: str | None = None,
-        max_price: float | None = None
-    ) -> list[dict]:
+    def build_filters(self, category: str | None = None, max_price: float | None = None):
+            filters: dict[str, Any] = {}
+            if category:
+                filters["category"] = category
+            if max_price is not None:
+                filters["price"] = {"$lte": max_price}
+            return filters
 
-        query = {}
-
-        if category is not None:
-            query["category"] = category
-
-        if max_price is not None:
-            query["price"] = {"$lte": max_price}
-
-        raw_products = await self.collection.find(query).to_list(length=None)
-
+    async def list_products(self, category: str | None = None, max_price: float | None = None):
+        query = self.build_filters(category=category, max_price=max_price)
+        cursor = self.collection.find(query)
+        raw_products = await cursor.to_list(length=100)
+        
         products = []
-
         for doc in raw_products:
             if "_id" in doc:
                 doc["id"] = str(doc["_id"])
                 del doc["_id"]
-
             products.append(doc)
-
         return products
 
     async def create_product(self, product_dict: dict) -> dict:
@@ -41,5 +35,6 @@ class ProductRepository:
 
         created_product = data_to_insert.copy()
         created_product["id"] = str(result.inserted_id)
+        created_product.pop("_id", None)
 
         return created_product

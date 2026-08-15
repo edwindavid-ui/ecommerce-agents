@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status
+from app.db.mongodb import database
 
 from app.db.repositories.seller_agents import SellerAgentRepository
 from app.schemas.seller_agent import SellerAgentCreate, OfferEvaluationRequest
@@ -8,7 +9,8 @@ from app.services.ai_service import AIService
 router = APIRouter(prefix="/seller-agents", tags=["seller-agents"])
 
 # Initialize repositories and services
-agent_repo = SellerAgentRepository(collection=None)
+
+agent_repo = SellerAgentRepository(collection=database.get_collection("seller_agents"))
 ai_service = AIService()
 seller_agent_service = SellerAgentService(agent_repo, ai_service)
 

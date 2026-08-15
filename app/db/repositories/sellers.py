@@ -9,57 +9,62 @@ class SellerRepository:
         self.collection = collection
 
     async def create_seller(self, user_id: str, seller_data: SellerCreate) -> dict:
-        # 1. Convert the Pydantic model to a standard dictionary
-        seller_dict = seller_data.model_dump()
-        
-        # 2. Add the extra required fields
+        seller_dict = seller_data.model_dump()        
         seller_dict["user_id"] = user_id
         seller_dict["rating"] = 0.0
         seller_dict["status"] = "active"
-        
-        # 3. Actually insert the document into MongoDB!
         result = await self.collection.insert_one(seller_dict)
-        
-        # 4. Attach the generated MongoDB ObjectId (as a string) before returning
         seller_dict["id"] = str(result.inserted_id)
         
         return seller_dict
 
     async def get_seller_by_user_id(self, user_id: str) -> dict | None:
-        # You will also need to update this method to query the real database!
         seller = await self.collection.find_one({"user_id": user_id})
         
         if seller:
-            # Convert the raw _id to a string id for your response schema
             seller["id"] = str(seller["_id"])
             
         return seller
 
+
 class InventoryRepository:
     def __init__(self, collection: Any):
         self.collection = collection
-        self._inventory: dict[str, dict] = {}
 
     async def create_inventory(self, product_id: str, quantity: int) -> dict:
-        inventory = {
-            "id": f"inv_{len(self._inventory) + 1}",
+        inventory_dict = {
             "product_id": product_id,
             "quantity": quantity,
             "available_quantity": quantity,
             "reserved_quantity": 0,
         }
-        self._inventory[inventory["id"]] = inventory
-        return inventory
+        
+        # 1. Insert into MongoDB collection
+        result = await self.collection.insert_one(inventory_dict)
+        
+        # 2. Format response and convert ObjectId to string id
+        created_inventory = inventory_dict.copy()
+        created_inventory["id"] = str(result.inserted_id)
+        created_inventory.pop("_id", None)
+        
+        return created_inventory
 
     async def get_inventory_by_product_id(self, product_id: str) -> Optional[dict]:
-        for inv in self._inventory.values():
-            if inv["product_id"] == product_id:
-                return inv
-        return None
+        # 3. Query MongoDB for the inventory item
+        doc = await self.collection.find_one({"product_id": product_id})
+        if doc:
+            doc["id"] = str(doc["_id"])
+            doc.pop("_id", None)
+        return doc
 
     async def update_available_quantity(self, product_id: str, available_quantity: int) -> Optional[dict]:
-        for inv in self._inventory.values():
-            if inv["product_id"] == product_id:
-                inv["available_quantity"] = available_quantity
-                return inv
-        return None
+        # 4. Update MongoDB and return the updated document
+        doc = await self.collection.find_one_and_update(
+            {"product_id": product_id},
+            {"$set": {"available_quantity": available_quantity}},
+            return_document=True
+        )
+        if doc:
+            doc["id"] = str(doc["_id"])
+            doc.pop("_id", None)
+        return doc
