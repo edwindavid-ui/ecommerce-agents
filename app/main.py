@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 
-from app.db.mongodb import user_collection
 from app.db.mongodb import ping_db
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import router as auth_router
 from app.api.buyer_agents import router as buyer_agents_router
@@ -23,6 +23,14 @@ app.include_router(negotiations_router)
 app.include_router(orders_router)
 app.include_router(jobs_router)
 
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allows Lovable to hit your ngrok tunnel cleanly
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def read_root():

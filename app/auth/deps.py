@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timezone
 
+# 1. Initialize the standard Bearer scheme
 bearer_scheme = HTTPBearer()
 
 # 2. Define the Dependency
@@ -42,4 +43,3 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(b
         raise credentials_exception
     except Exception:
         raise credentials_exception
- 

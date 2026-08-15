@@ -1,27 +1,45 @@
-from typing import Any
-
-
 class ProductRepository:
-    def __init__(self, collection: Any):
+
+    def __init__(self, collection):
         self.collection = collection
 
-    def build_filters(self, category: str | None = None, max_price: float | None = None) -> dict:
-        filters: dict[str, Any] = {}
+    async def list_products(
+        self,
+        category: str | None = None,
+        max_price: float | None = None
+    ) -> list[dict]:
 
-        if category:
-            filters["category"] = category
+        query = {}
+
+        if category is not None:
+            query["category"] = category
 
         if max_price is not None:
-            filters["price"] = {"$lte": max_price}
+            query["price"] = {"$lte": max_price}
 
-        return filters
+        raw_products = await self.collection.find(query).to_list(length=None)
 
-    async def list_products(self, category: str | None = None, max_price: float | None = None):
-        query = self.build_filters(category=category, max_price=max_price)
-        cursor = self.collection.find(query)
-        return await cursor.to_list(length=100)  # Limit to 100 results for simplicity
+        products = []
+
+        for doc in raw_products:
+            if "_id" in doc:
+                doc["id"] = str(doc["_id"])
+                del doc["_id"]
+
+            products.append(doc)
+
+        return products
 
     async def create_product(self, product_dict: dict) -> dict:
-        result = await self.collection.insert_one(product_dict)
-        product_dict["id"] = str(result.inserted_id)
-        return product_dict
+
+        data_to_insert = product_dict.copy()
+
+        data_to_insert.pop("_id", None)
+        data_to_insert.pop("id", None)
+
+        result = await self.collection.insert_one(data_to_insert)
+
+        created_product = data_to_insert.copy()
+        created_product["id"] = str(result.inserted_id)
+
+        return created_product

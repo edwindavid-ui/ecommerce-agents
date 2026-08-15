@@ -60,6 +60,7 @@ class AuthService:
         }
 
     def _create_token(self, user: dict) -> str:
-        expiry = datetime.now(timezone.utc) + timedelta(hours=1)
+        expiry_dt = datetime.now(timezone.utc) + timedelta(hours=1)
+        expiry_str = expiry_dt.strftime("%Y%m%d%H%M%S")
         user_id = str(user["_id"])
-        return f"token_for_{user_id}_expires_at_{expiry.isoformat()}"
+        return f"token_{user_id}_{expiry_str}"

@@ -5,30 +5,35 @@ from app.schemas.seller import SellerCreate
 
 class SellerRepository:
     def __init__(self, collection: Any):
+        # We only need the MongoDB collection pointer here now
         self.collection = collection
-        self._sellers: dict[str, dict] = {}
 
     async def create_seller(self, user_id: str, seller_data: SellerCreate) -> dict:
-        seller = {
-            "id": f"seller_{len(self._sellers) + 1}",
-            "user_id": user_id,
-            "business_name": seller_data.business_name,
-            "description": seller_data.description,
-            "rating": 0.0,
-            "status": "active",
-        }
-        self._sellers[seller["id"]] = seller
+        # 1. Convert the Pydantic model to a standard dictionary
+        seller_dict = seller_data.model_dump()
+        
+        # 2. Add the extra required fields
+        seller_dict["user_id"] = user_id
+        seller_dict["rating"] = 0.0
+        seller_dict["status"] = "active"
+        
+        # 3. Actually insert the document into MongoDB!
+        result = await self.collection.insert_one(seller_dict)
+        
+        # 4. Attach the generated MongoDB ObjectId (as a string) before returning
+        seller_dict["id"] = str(result.inserted_id)
+        
+        return seller_dict
+
+    async def get_seller_by_user_id(self, user_id: str) -> dict | None:
+        # You will also need to update this method to query the real database!
+        seller = await self.collection.find_one({"user_id": user_id})
+        
+        if seller:
+            # Convert the raw _id to a string id for your response schema
+            seller["id"] = str(seller["_id"])
+            
         return seller
-
-    async def get_seller_by_user_id(self, user_id: str) -> Optional[dict]:
-        for seller in self._sellers.values():
-            if seller["user_id"] == user_id:
-                return seller
-        return None
-
-    async def get_seller_by_id(self, seller_id: str) -> Optional[dict]:
-        return self._sellers.get(seller_id)
-
 
 class InventoryRepository:
     def __init__(self, collection: Any):
