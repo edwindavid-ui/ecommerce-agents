@@ -1,5 +1,9 @@
 from typing import Any, Optional
 from dotenv import load_dotenv
+from google import genai
+from google.genai import types
+import json
+import re
 import os
 
 load_dotenv()
@@ -34,7 +38,7 @@ class MockLLMProvider(BaseLLMProvider):
 
 
 class GeminiProvider(BaseLLMProvider):
-    def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
+    def __init__(self, api_key: str, model: str = "gemini-3.5-flash"):
         """
         Gemini API provider for structured LLM calls.
         
@@ -50,9 +54,7 @@ class GeminiProvider(BaseLLMProvider):
         
         # Import here to avoid requiring the library if not used
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=api_key)
-            self.client = genai.GenerativeModel(model)
+            self.client = genai.Client(api_key=api_key)
         except ImportError:
             raise ImportError("google-generativeai is required for Gemini provider. Install with: pip install google-generativeai")
 
@@ -68,16 +70,22 @@ class GeminiProvider(BaseLLMProvider):
         }
         """
         try:
-            response = self.client.generate_content(prompt)
-            text = response.text
-            
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",  # Forces Gemini to output clean JSON
+                    temperature=0.3,
+                ),
+             )
+            result = json.loads(response.text)  
             # Parse the response to extract structured data
-            # Gemini returns text, we need to extract the structured fields
-            result = self._parse_response(text)
-            
+            # Gemini returns text, we need to extract the structured fields            
             # Validate against schema
-            validated = StructuredResponse(**result)
+            response_data = self._parse_response(response.text)
+            validated = StructuredResponse(**response_data)
             return validated.model_dump()
+            
             
         except Exception as exc:
             raise RuntimeError(f"Gemini API call failed: {exc}")
@@ -88,8 +96,6 @@ class GeminiProvider(BaseLLMProvider):
         Parse Gemini response text into structured format.
         Expects JSON-like structure in the response.
         """
-        import json
-        import re
         
         # Try to extract JSON from the response
         json_match = re.search(r'\{.*\}', text, re.DOTALL)
@@ -110,20 +116,3 @@ class GeminiProvider(BaseLLMProvider):
             "decision": "PROCEED",
             "confidence": 0.7,
         }
-
-
-class OpenAIProvider(BaseLLMProvider):
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4"):
-        self.api_key = api_key
-        self.model = model
-        # In real implementation, initialize OpenAI client here
-        # from openai import OpenAI
-        # self.client = OpenAI(api_key=api_key)
-
-    def call_model(self, prompt: str, **kwargs) -> dict:
-        """
-        Call OpenAI API with structured output.
-        To be implemented when API keys are available.
-        """
-        raise NotImplementedError("OpenAI provider requires valid API key")
-

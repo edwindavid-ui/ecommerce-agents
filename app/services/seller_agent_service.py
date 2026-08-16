@@ -49,62 +49,54 @@ class SellerAgentService:
         }
 
     async def evaluate_offer(self, agent_id: str, offer_request: OfferEvaluationRequest) -> dict:
-        """
-        Evaluate a buyer offer using seller policy and AI reasoning.
-        Backend enforces pricing constraints strictly.
-        """
-        agent = await self.agent_repo.get_agent_by_id(agent_id)
-        if not agent:
-            raise ValueError("Seller agent not found")
-        
-        offer_price = offer_request.offer_price
-        min_price = agent["min_price"]
-        target_price = agent["target_price"]
-        
-        # Rule 1: Offer must not be below minimum (hard constraint)
-        if offer_price < min_price:
-            decision = "reject"
-            reasoning = f"Offer ${offer_price} is below minimum acceptable price ${min_price}"
-            return {
-                "decision": decision,
-                "reasoning": reasoning,
-                "counter_price": None,
-                "confidence": 0.95,
-            }
-        
-        # Rule 2: Offer meets or exceeds target - accept
-        if offer_price >= target_price:
-            decision = "accept"
-            reasoning = f"Offer ${offer_price} meets or exceeds target price ${target_price}"
-            return {
-                "decision": decision,
-                "reasoning": reasoning,
-                "counter_price": None,
-                "confidence": 0.95,
-            }
-        
-        # Rule 3: Offer is between min and target - counter
-        if min_price <= offer_price < target_price:
-            # Calculate counter price as midpoint, capped to ensure it's above min
-            counter_price = max((offer_price + target_price) / 2, min_price + 1.0)
-            decision = "counter"
-            reasoning = f"Offer ${offer_price} is acceptable but below target. Countering with ${counter_price:.2f}"
-            return {
-                "decision": decision,
-                "reasoning": reasoning,
-                "counter_price": round(counter_price, 2),
-                "confidence": 0.85,
-            }
-        
-        # Default: reject
-        decision = "reject"
-        reasoning = "Unable to evaluate offer"
-        return {
-            "decision": decision,
-            "reasoning": reasoning,
-            "counter_price": None,
-            "confidence": 0.5,
-        }
+            """
+            Evaluate a buyer offer using backend hard rules for boundaries,
+            and Gemini AI via AIService for intelligent decision-making and counter-offers.
+            """
+            agent = await self.agent_repo.get_agent_by_id(agent_id)
+            if not agent:
+                raise ValueError("Seller agent not found")
+
+            offer_price = offer_request.offer_price
+            min_price = agent["min_price"]
+            target_price = agent["target_price"]
+            product_name = agent.get("product_id", "Item")
+
+            # 1. Hard Constraint: Reject immediately if below absolute minimum
+            if offer_price < min_price:
+                return {
+                    "decision": "reject",
+                    "reasoning": f"Offer ${offer_price} is below the absolute minimum acceptable price (${min_price}).",
+                    "counter_price": None,
+                    "confidence": 1.0
+                }
+
+            # 2. Hard Constraint: Accept immediately if it meets or exceeds target
+            if offer_price >= target_price:
+                return {
+                    "decision": "accept",
+                    "reasoning": f"Offer ${offer_price} meets or exceeds the seller's target price (${target_price}).",
+                    "counter_price": None,
+                    "confidence": 1.0
+                }
+
+            # 3. Intermediate Range: Delegate to Gemini AI via AIService for intelligent negotiation
+            ai_evaluation = await self.ai_service.evaluate_offer_as_seller(
+                offer_price=offer_price,
+                min_price=min_price,
+                product_name=product_name
+            )
+
+            # If Gemini decides to counter, call the counter-offer service method
+            if ai_evaluation.get("decision") == "counter":
+                counter_result = await self.ai_service.generate_counter_offer(
+                    buyer_offer=offer_price,
+                    seller_min=min_price,
+                    seller_target=target_price
+                )
+                return counter_result
+
+            return ai_evaluation
 
     async def increment_round(self, agent_id: str) -> dict:
         """Increment negotiation round counter."""
