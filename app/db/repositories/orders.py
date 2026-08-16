@@ -1,49 +1,69 @@
+from typing import Any, Optional, List
+from bson import ObjectId
 from datetime import datetime, timezone
-from typing import Any, Optional
-
-from app.schemas.order import OrderCreate
-
 
 class OrderRepository:
     def __init__(self, collection: Any):
         self.collection = collection
-        self._orders: dict[str, dict] = {}
 
-    async def create_order(self, order_data: OrderCreate, negotiation: dict) -> dict:
-        """Create an order from an accepted negotiation."""
-        order_id = f"order_{len(self._orders) + 1}"
-        now = datetime.now(timezone.utc).isoformat()
+    async def create_order(self, order_dict: dict) -> dict:
+        # Generate a clean readable order reference number
+        date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+        count = await self.collection.count_documents({})
+        order_dict["order_number"] = f"ORD-{date_str}-{count + 1:04d}"
         
-        order = {
-            "id": order_id,
-            "negotiation_id": order_data.negotiation_id,
-            "buyer_id": negotiation["buyer_id"],
-            "seller_id": negotiation["seller_id"],
-            "product_id": negotiation["product_id"],
-            "final_price": negotiation["final_price"],
-            "status": "pending",
-            "created_at": now,
-            "updated_at": now,
-        }
-        self._orders[order_id] = order
-        return order
+        now_str = datetime.now(timezone.utc).isoformat()
+        order_dict["created_at"] = now_str
+        order_dict["updated_at"] = now_str
 
-    async def get_order_by_id(self, order_id: str) -> Optional[dict]:
-        return self._orders.get(order_id)
+        result = await self.collection.insert_one(order_dict)
+        
+        created = order_dict.copy()
+        created["id"] = str(result.inserted_id)
+        created.pop("_id", None)
+        return created
 
-    async def update_order_status(self, order_id: str, status: str) -> Optional[dict]:
-        order = self._orders.get(order_id)
-        if not order:
+    async def get_by_id(self, order_id: str) -> Optional[dict]:
+        try:
+            doc = await self.collection.find_one({"_id": ObjectId(order_id)})
+            if doc:
+                doc["id"] = str(doc["_id"])
+                doc.pop("_id", None)
+            return doc
+        except Exception:
             return None
-        order["status"] = status
-        order["updated_at"] = datetime.now(timezone.utc).isoformat()
-        return order
 
-    async def list_orders_by_buyer(self, buyer_id: str) -> list[dict]:
-        return [o for o in self._orders.values() if o["buyer_id"] == buyer_id]
+    async def get_by_buyer_id(self, buyer_id: str) -> List[dict]:
+        cursor = self.collection.find({"buyer_id": buyer_id})
+        docs = await cursor.to_list(length=100)
+        orders = []
+        for doc in docs:
+            doc["id"] = str(doc["_id"])
+            doc.pop("_id", None)
+            orders.append(doc)
+        return orders
 
-    async def list_orders_by_seller(self, seller_id: str) -> list[dict]:
-        return [o for o in self._orders.values() if o["seller_id"] == seller_id]
+    async def get_by_seller_id(self, seller_id: str) -> List[dict]:
+        cursor = self.collection.find({"seller_id": seller_id})
+        docs = await cursor.to_list(length=100)
+        orders = []
+        for doc in docs:
+            doc["id"] = str(doc["_id"])
+            doc.pop("_id", None)
+            orders.append(doc)
+        return orders
 
-    async def list_all_orders(self) -> list[dict]:
-        return list(self._orders.values())
+    async def update_status(self, order_id: str, new_status: str) -> Optional[dict]:
+        try:
+            now_str = datetime.now(timezone.utc).isoformat()
+            doc = await self.collection.find_one_and_update(
+                {"_id": ObjectId(order_id)},
+                {"$set": {"status": new_status, "updated_at": now_str}},
+                return_document=True
+            )
+            if doc:
+                doc["id"] = str(doc["_id"])
+                doc.pop("_id", None)
+            return doc
+        except Exception:
+            return None

@@ -1,114 +1,84 @@
-from app.db.repositories.orders import OrderRepository
-from app.db.repositories.negotiations import NegotiationRepository
-from app.schemas.order import OrderCreate
-
+from datetime import datetime, timezone
+from bson import ObjectId
 
 class OrderService:
-    def __init__(self, order_repo: OrderRepository, negotiation_repo: NegotiationRepository):
+    def __init__(
+        self,
+        order_repo,
+        negotiation_repo,
+        product_repo,
+        inventory_repo
+    ):
         self.order_repo = order_repo
         self.negotiation_repo = negotiation_repo
+        self.product_repo = product_repo
+        self.inventory_repo = inventory_repo
 
-    async def create_order_from_negotiation(self, order_data: OrderCreate) -> dict:
-        """Create an order from an accepted negotiation."""
-        # Validate negotiation exists and is accepted
-        negotiation = await self.negotiation_repo.get_negotiation_by_id(order_data.negotiation_id)
-        if not negotiation:
+    async def create_from_negotiation(self, negotiation_id: str) -> dict:
+        # 1. Fetch negotiation
+        neg = await self.negotiation_repo.get_by_id(negotiation_id)
+        if not neg:
             raise ValueError("Negotiation not found")
         
-        if negotiation["status"] != "accepted":
-            raise ValueError(f"Cannot create order from negotiation with status: {negotiation['status']}")
-        
-        if negotiation["final_price"] is None:
-            raise ValueError("Negotiation does not have a final price")
-        
-        # Create order
-        order = await self.order_repo.create_order(order_data, negotiation)
-        
-        return {
-            "order_id": order["id"],
-            "negotiation_id": order["negotiation_id"],
-            "buyer_id": order["buyer_id"],
-            "seller_id": order["seller_id"],
-            "product_id": order["product_id"],
-            "final_price": order["final_price"],
-            "status": order["status"],
-            "created_at": order["created_at"],
-            "updated_at": order["updated_at"],
-        }
+        if neg["status"] != "accepted":
+            raise ValueError(f"Orders can only be created from accepted negotiations (Current status: {neg['status']})")
 
-    async def get_order(self, order_id: str) -> dict:
-        """Retrieve an order by ID."""
-        order = await self.order_repo.get_order_by_id(order_id)
-        if not order:
-            raise ValueError("Order not found")
-        
-        return {
-            "order_id": order["id"],
-            "negotiation_id": order["negotiation_id"],
-            "buyer_id": order["buyer_id"],
-            "seller_id": order["seller_id"],
-            "product_id": order["product_id"],
-            "final_price": order["final_price"],
-            "status": order["status"],
-            "created_at": order["created_at"],
-            "updated_at": order["updated_at"],
-        }
+        # 2. Verify product exists
+        product = await self.product_repo.get_product(neg["product_id"])
+        if not product:
+            raise ValueError("Product not found")
 
-    async def update_order_status(self, order_id: str, status: str) -> dict:
-        """Update the status of an order."""
-        # Validate status
-        valid_statuses = ["pending", "confirmed", "processing", "delivered", "cancelled"]
-        if status not in valid_statuses:
-            raise ValueError(f"Invalid status: {status}")
-        
-        order = await self.order_repo.update_order_status(order_id, status)
-        if not order:
-            raise ValueError("Order not found")
-        
-        return {
-            "order_id": order["id"],
-            "negotiation_id": order["negotiation_id"],
-            "buyer_id": order["buyer_id"],
-            "seller_id": order["seller_id"],
-            "product_id": order["product_id"],
-            "final_price": order["final_price"],
-            "status": order["status"],
-            "created_at": order["created_at"],
-            "updated_at": order["updated_at"],
-        }
+        quantity = neg.get("quantity", 1)
+        unit_price = neg.get("current_offer") or neg.get("final_price")
+        if not unit_price:
+            raise ValueError("Invalid negotiated price found in negotiation record")
 
-    async def list_orders_by_buyer(self, buyer_id: str) -> list[dict]:
-        """List all orders for a buyer."""
-        orders = await self.order_repo.list_orders_by_buyer(buyer_id)
-        return [
+        total_price = unit_price * quantity
+
+        # 3. Find associated inventory doc for this product and seller
+        inventory_doc = await self.inventory_repo.collection.find_one({
+            "product_id": neg["product_id"],
+            "seller_id": neg["seller_id"]
+        })
+
+        if not inventory_doc:
+            raise ValueError("Inventory record not found for this product and seller")
+
+        inventory_id = inventory_doc["_id"]
+        current_qty = inventory_doc.get("quantity", 0)
+
+        # 4. Atomic stock deduction to prevent overselling
+        # Ensures quantity is greater than or equal to what is being purchased
+        updated_inventory = await self.inventory_repo.collection.find_one_and_update(
             {
-                "order_id": order["id"],
-                "negotiation_id": order["negotiation_id"],
-                "buyer_id": order["buyer_id"],
-                "seller_id": order["seller_id"],
-                "product_id": order["product_id"],
-                "final_price": order["final_price"],
-                "status": order["status"],
-                "created_at": order["created_at"],
-                "updated_at": order["updated_at"],
-            }
-            for order in orders
-        ]
-
-    async def list_orders_by_seller(self, seller_id: str) -> list[dict]:
-        """List all orders for a seller."""
-        orders = await self.order_repo.list_orders_by_seller(seller_id)
-        return [
+                "_id": ObjectId(inventory_id),
+                "quantity": {"$gte": quantity}
+            },
             {
-                "order_id": order["id"],
-                "negotiation_id": order["negotiation_id"],
-                "buyer_id": order["buyer_id"],
-                "seller_id": order["seller_id"],
-                "product_id": order["product_id"],
-                "final_price": order["final_price"],
-                "status": order["status"],
-                "created_at": order["created_at"],
-                "updated_at": order["updated_at"],
-            }
-            for order in orders
-        ]
+                "$inc": {"quantity": -quantity}
+            },
+            return_document=True
+        )
+
+        if not updated_inventory:
+            raise ValueError("Insufficient stock available to fulfill this order.")
+
+        # 5. Build and save the order
+        order_data = {
+            "buyer_id": neg["buyer_id"],
+            "seller_id": neg["seller_id"],
+            "product_id": neg["product_id"],
+            "negotiation_id": negotiation_id,
+            "quantity": quantity,
+            "unit_price": unit_price,
+            "total_price": total_price,
+            "currency": neg.get("currency", "NGN"),
+            "status": "confirmed"
+        }
+
+        created_order = await self.order_repo.create_order(order_data)
+
+        # 6. Mark negotiation as completed
+        await self.negotiation_repo.update_status(negotiation_id, "completed")
+
+        return created_order

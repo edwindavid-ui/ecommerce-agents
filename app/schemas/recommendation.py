@@ -1,27 +1,25 @@
 from typing import Optional
-
 from pydantic import BaseModel, Field
 
 
+from pydantic import BaseModel, Field
+from typing import Any, Optional, List
+
 class RecommendationRequest(BaseModel):
-    buyer_id: str = Field(..., min_length=1)
-    category: Optional[str] = None
-    max_price: Optional[float] = None
-    min_price: Optional[float] = None
+    query: Optional[str] = Field(default=None, description="Search keyword or user intent description")
+    category: Optional[str] = Field(default=None, description="Product category filter")
+    min_price: Optional[float] = Field(default=None, ge=0, description="Minimum price boundary")
+    max_price: Optional[float] = Field(default=None, ge=0, description="Maximum budget boundary")
+    preferences: dict[str, Any] = Field(default={}, description="Key-value product attributes (e.g., ramGB, storageGB)")
+    limit: int = Field(default=10, ge=1, le=50, description="Maximum number of recommendations to return")
 
-
-class RecommendationResult(BaseModel):
+class RecommendationItem(BaseModel):
     product_id: str
-    name: str
-    category: str
-    price: float
     seller_id: str
-    score: float
-
+    score: float = Field(..., ge=0, le=1, description="AI confidence or utility ranking score")
+    reason: str = Field(..., description="Explanation for why this product fits the user")
+    product: dict = Field(..., description="Full product metadata details")
 
 class RecommendationResponse(BaseModel):
-    recommendation_id: str
-    buyer_id: str
-    status: str
-    results: list[RecommendationResult] = []
-    filters_applied: dict = {}
+    request_id: str
+    results: List[RecommendationItem]

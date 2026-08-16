@@ -1,44 +1,43 @@
-from typing import Optional
-
 from pydantic import BaseModel, Field
-
+from typing import Optional, List
+from datetime import datetime
 
 class NegotiationCreate(BaseModel):
     buyer_id: str = Field(..., min_length=1)
     seller_id: str = Field(..., min_length=1)
     product_id: str = Field(..., min_length=1)
-    buyer_max_price: float = Field(..., gt=0)
-    seller_min_price: float = Field(..., gt=0)
-    seller_target_price: float = Field(..., gt=0)
-    max_rounds: int = Field(default=5, ge=1)
+    
+    initial_offer: float = Field(..., gt=0)
+    max_price: float = Field(..., gt=0, description="Buyer's hard ceiling limit")
+    
+    currency: str = "NGN"
+    max_rounds: int = Field(default=5, ge=1, le=20)
 
+class OfferCreate(BaseModel):
+    price: float = Field(..., gt=0)
+    message: Optional[str] = None
+
+class OfferResponse(BaseModel):
+    round: int
+    party: str
+    price: float
+    message: Optional[str]
+    created_at: str
 
 class NegotiationResponse(BaseModel):
-    negotiation_id: str
+    id: str
     buyer_id: str
     seller_id: str
     product_id: str
-    buyer_max_price: float
-    seller_min_price: float
-    seller_target_price: float
-    status: str
-    current_round: int = 0
-    current_offer: Optional[float] = None
+    
+    initial_price: float
+    current_offer: float
     final_price: Optional[float] = None
-    created_at: str
-    updated_at: str
-
-
-class OfferRequest(BaseModel):
-    actor: str = Field(..., pattern="^(buyer|seller)$")
-    offer_price: float = Field(..., gt=0)
-
-
-class NegotiationMessage(BaseModel):
-    message_id: str
-    negotiation_id: str
-    actor: str
-    message_type: str  # offer, counter, accept, reject
-    offer_price: Optional[float] = None
-    reasoning: str
-    created_at: str
+    
+    currency: str
+    round: int
+    max_rounds: int
+    
+    status: str
+    current_turn: str
+    offers: List[OfferResponse] = []

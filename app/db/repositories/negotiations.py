@@ -1,78 +1,92 @@
+from typing import Any, Optional, List
+from bson import ObjectId
 from datetime import datetime, timezone
-from typing import Any, Optional
-
-from app.schemas.negotiation import NegotiationCreate
-
 
 class NegotiationRepository:
     def __init__(self, collection: Any):
         self.collection = collection
-        self._negotiations: dict[str, dict] = {}
-        self._messages: dict[str, list[dict]] = {}
 
-    async def create_negotiation(self, neg_data: NegotiationCreate) -> dict:
-        neg_id = f"neg_{len(self._negotiations) + 1}"
-        now = datetime.now(timezone.utc).isoformat()
+    async def create(self, neg_dict: dict) -> dict:
+        neg_dict["status"] = "active"
+        neg_dict["current_turn"] = "seller"  # Buyer makes the initial offer, so it's the seller's turn
+        neg_dict["round"] = 1
+        neg_dict["final_price"] = None
         
-        negotiation = {
-            "id": neg_id,
-            "buyer_id": neg_data.buyer_id,
-            "seller_id": neg_data.seller_id,
-            "product_id": neg_data.product_id,
-            "buyer_max_price": neg_data.buyer_max_price,
-            "seller_min_price": neg_data.seller_min_price,
-            "seller_target_price": neg_data.seller_target_price,
-            "max_rounds": neg_data.max_rounds,
-            "status": "initiated",
-            "current_round": 0,
-            "current_offer": None,
-            "final_price": None,
-            "created_at": now,
-            "updated_at": now,
-        }
-        self._negotiations[neg_id] = negotiation
-        self._messages[neg_id] = []
-        return negotiation
+        # Initialize the audit log with the opening bid
+        neg_dict["offers"] = [{
+            "round": 1,
+            "party": "buyer",
+            "price": neg_dict["initial_offer"],
+            "message": "Initial offer from buyer",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }]
+        neg_dict["created_at"] = datetime.now(timezone.utc).isoformat()
+        neg_dict["updated_at"] = neg_dict["created_at"]
+        
+        result = await self.collection.insert_one(neg_dict)
+        
+        created = neg_dict.copy()
+        created["id"] = str(result.inserted_id)
+        created.pop("_id", None)
+        return created
 
-    async def get_negotiation_by_id(self, negotiation_id: str) -> Optional[dict]:
-        return self._negotiations.get(negotiation_id)
-
-    async def update_negotiation_status(self, negotiation_id: str, status: str) -> Optional[dict]:
-        neg = self._negotiations.get(negotiation_id)
-        if not neg:
+    async def get_by_id(self, neg_id: str) -> Optional[dict]:
+        try:
+            doc = await self.collection.find_one({"_id": ObjectId(neg_id)})
+            if doc:
+                doc["id"] = str(doc["_id"])
+                doc.pop("_id", None)
+            return doc
+        except Exception:
             return None
-        neg["status"] = status
-        neg["updated_at"] = datetime.now(timezone.utc).isoformat()
-        return neg
 
-    async def update_negotiation_offer(self, negotiation_id: str, offer_price: float, round_num: int) -> Optional[dict]:
-        neg = self._negotiations.get(negotiation_id)
-        if not neg:
+    async def add_offer(self, neg_id: str, party: str, price: float, message: Optional[str], new_round: int, next_turn: str) -> Optional[dict]:
+        try:
+            offer = {
+                "round": new_round,
+                "party": party,
+                "price": price,
+                "message": message,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            
+            doc = await self.collection.find_one_and_update(
+                {"_id": ObjectId(neg_id)},
+                {
+                    "$push": {"offers": offer},
+                    "$set": {
+                        "current_offer": price,
+                        "round": new_round,
+                        "current_turn": next_turn,
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }
+                },
+                return_document=True
+            )
+            if doc:
+                doc["id"] = str(doc["_id"])
+                doc.pop("_id", None)
+            return doc
+        except Exception:
             return None
-        neg["current_offer"] = offer_price
-        neg["current_round"] = round_num
-        neg["updated_at"] = datetime.now(timezone.utc).isoformat()
-        return neg
 
-    async def set_final_price(self, negotiation_id: str, final_price: float) -> Optional[dict]:
-        neg = self._negotiations.get(negotiation_id)
-        if not neg:
+    async def update_status(self, neg_id: str, status: str, final_price: Optional[float] = None) -> Optional[dict]:
+        try:
+            update_fields = {
+                "status": status,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+            if final_price is not None:
+                update_fields["final_price"] = final_price
+
+            doc = await self.collection.find_one_and_update(
+                {"_id": ObjectId(neg_id)},
+                {"$set": update_fields},
+                return_document=True
+            )
+            if doc:
+                doc["id"] = str(doc["_id"])
+                doc.pop("_id", None)
+            return doc
+        except Exception:
             return None
-        neg["final_price"] = final_price
-        neg["updated_at"] = datetime.now(timezone.utc).isoformat()
-        return neg
-
-    async def add_message(self, negotiation_id: str, message: dict) -> Optional[dict]:
-        if negotiation_id not in self._messages:
-            return None
-        self._messages[negotiation_id].append(message)
-        return message
-
-    async def get_messages(self, negotiation_id: str) -> list[dict]:
-        return self._messages.get(negotiation_id, [])
-
-    async def list_negotiations_by_buyer(self, buyer_id: str) -> list[dict]:
-        return [n for n in self._negotiations.values() if n["buyer_id"] == buyer_id]
-
-    async def list_negotiations_by_seller(self, seller_id: str) -> list[dict]:
-        return [n for n in self._negotiations.values() if n["seller_id"] == seller_id]

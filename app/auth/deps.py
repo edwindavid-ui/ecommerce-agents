@@ -1,45 +1,27 @@
+import os
+import jwt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from datetime import datetime, timezone
+from fastapi.security import OAuth2PasswordBearer
 
-# 1. Initialize the standard Bearer scheme
-bearer_scheme = HTTPBearer()
+# Point this to whatever your login route URL is (e.g., "/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-# 2. Define the Dependency
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> str:
-    """
-    Parses the custom token, checks the expiration date, and returns the user_id.
-    """
+SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret_key_if_env_fails")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
+
+async def get_current_user_id(token: str = Depends(oauth2_scheme)) -> str:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
     try:
-        # HTTPBearer automatically strips the "Bearer " prefix and extracts just the token string
-        token = credentials.credentials
-        
-        # Your token format looks like: token_64df..._20260815123000
-        parts = token.split("_")
-        
-        if len(parts) != 3 or parts[0] != "token":
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
             raise credentials_exception
-            
-        user_id = parts[1]
-        expiry_str = parts[2]
-        
-        expiry_date = datetime.strptime(expiry_str, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
-        
-        if datetime.now(timezone.utc) > expiry_date:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Token has expired"
-            )
-            
         return user_id
-        
-    except (ValueError, IndexError):
-        raise credentials_exception
-    except Exception:
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired")
+    except jwt.InvalidTokenError:
         raise credentials_exception

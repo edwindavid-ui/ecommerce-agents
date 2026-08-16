@@ -20,17 +20,35 @@ class SellerService:
 
 
 class InventoryService:
-    def __init__(self, inventory_repository: InventoryRepository):
+    def __init__(self, inventory_repository):
         self.repo = inventory_repository
 
-    async def create_inventory(self, product_id: str, quantity: int) -> dict:
-        existing = await self.repo.get_inventory_by_product_id(product_id)
+    async def create_inventory(self, product_id: str, seller_id: str, quantity: int) -> dict:
+        existing = await self.repo.get_inventory_by_seller_and_product(seller_id, product_id)
         if existing:
-            raise ValueError("Inventory already exists for this product")
-        return await self.repo.create_inventory(product_id, quantity)
+            raise ValueError("Inventory already exists for this product and seller")
+        return await self.repo.create_inventory(product_id, seller_id, quantity)
 
-    async def get_inventory_by_product_id(self, product_id: str) -> dict:
-        inv = await self.repo.get_inventory_by_product_id(product_id)
+    async def get_inventory(self, inventory_id: str) -> dict:
+        inv = await self.repo.get_inventory_by_id(inventory_id)
         if not inv:
-            raise ValueError("Inventory not found for this product")
+            raise ValueError("Inventory not found")
         return inv
+
+    async def update_inventory(self, inventory_id: str, quantity: int) -> dict:
+        updated = await self.repo.update_quantity(inventory_id, quantity)
+        if not updated:
+            raise ValueError("Inventory not found or update failed")
+        return updated
+
+    async def reserve_stock(self, inventory_id: str, quantity: int) -> dict:
+        updated = await self.repo.reserve_inventory(inventory_id, quantity)
+        if not updated:
+            raise ValueError("Failed to reserve stock. Insufficient available quantity or inventory not found.")
+        return updated
+
+    async def release_stock(self, inventory_id: str, quantity: int) -> dict:
+        updated = await self.repo.release_inventory(inventory_id, quantity)
+        if not updated:
+            raise ValueError("Failed to release stock. Invalid reservation amount or inventory not found.")
+        return updated

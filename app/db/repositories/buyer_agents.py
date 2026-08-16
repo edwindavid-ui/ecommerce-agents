@@ -1,74 +1,68 @@
-from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, List
+from bson import ObjectId
+from typing import Any, Optional, List
+from bson import ObjectId
 
-from app.schemas.buyer_agent import BuyerTaskCreate, BuyerAgentState
-
-
-class BuyerTaskRepository:
+class BuyerAgentRepository:
     def __init__(self, collection: Any):
         self.collection = collection
-        self._tasks: dict[str, dict] = {}
 
-    async def create_task(self, task_data: BuyerTaskCreate) -> dict:
-        task_id = f"task_{len(self._tasks) + 1}"
-        now = datetime.now(timezone.utc).isoformat()
+    async def create_agent(self, user_id: str, agent_dict: dict) -> dict:
+        agent_dict["user_id"] = user_id
+        agent_dict["status"] = "created"
+        agent_dict["current_product_id"] = None
+        agent_dict["current_seller_id"] = None
+        agent_dict["events"] = [{
+            "type": "agent_created",
+            "description": "Buyer agent initialized and ready for execution."
+        }]
         
-        task = {
-            "id": task_id,
-            "buyer_id": task_data.buyer_id,
-            "requirement": task_data.requirement,
-            "budget": task_data.budget,
-            "category": task_data.category,
-            "min_price": task_data.min_price,
-            "status": "task_created",
-            "selected_seller_id": None,
-            "selected_product_id": None,
-            "recommendation_id": None,
-            "created_at": now,
-            "updated_at": now,
-        }
-        self._tasks[task_id] = task
-        return task
+        result = await self.collection.insert_one(agent_dict)
+        
+        created = agent_dict.copy()
+        created["id"] = str(result.inserted_id)
+        created.pop("_id", None)
+        return created
 
-    async def get_task_by_id(self, task_id: str) -> Optional[dict]:
-        return self._tasks.get(task_id)
-
-    async def update_task_status(self, task_id: str, status: str) -> Optional[dict]:
-        task = self._tasks.get(task_id)
-        if not task:
+    async def get_agent(self, agent_id: str) -> Optional[dict]:
+        try:
+            doc = await self.collection.find_one({"_id": ObjectId(agent_id)})
+            if doc:
+                doc["id"] = str(doc["_id"])
+                doc.pop("_id", None)
+            return doc
+        except Exception:
             return None
-        task["status"] = status
-        task["updated_at"] = datetime.now(timezone.utc).isoformat()
-        return task
 
-    async def update_task_with_recommendation(self, task_id: str, recommendation_id: str) -> Optional[dict]:
-        task = self._tasks.get(task_id)
-        if not task:
+    async def update_status(self, agent_id: str, status: str, extra_updates: Optional[dict] = None) -> Optional[dict]:
+        try:
+            update_data = {"status": status}
+            if extra_updates:
+                update_data.update(extra_updates)
+                
+            doc = await self.collection.find_one_and_update(
+                {"_id": ObjectId(agent_id)},
+                {"$set": update_data},
+                return_document=True
+            )
+            if doc:
+                doc["id"] = str(doc["_id"])
+                doc.pop("_id", None)
+            return doc
+        except Exception:
             return None
-        task["recommendation_id"] = recommendation_id
-        task["updated_at"] = datetime.now(timezone.utc).isoformat()
-        return task
 
-    async def list_tasks_by_buyer(self, buyer_id: str) -> list[dict]:
-        return [t for t in self._tasks.values() if t["buyer_id"] == buyer_id]
+    async def add_event(self, agent_id: str, event_type: str, description: str) -> bool:
+        try:
+            event = {"type": event_type, "description": description}
+            result = await self.collection.update_one(
+                {"_id": ObjectId(agent_id)},
+                {"$push": {"events": event}}
+            )
+            return result.modified_count > 0
+        except Exception:
+            return False
 
-
-class BuyerAgentStateRepository:
-    def __init__(self, collection: Any):
-        self.collection = collection
-        self._states: dict[str, dict] = {}
-
-    async def save_state(self, task_id: str, state: BuyerAgentState) -> dict:
-        saved_state = state.model_dump()
-        self._states[task_id] = saved_state
-        return saved_state
-
-    async def get_state(self, task_id: str) -> Optional[dict]:
-        return self._states.get(task_id)
-
-    async def append_to_history(self, task_id: str, event: dict) -> Optional[dict]:
-        state = self._states.get(task_id)
-        if not state:
-            return None
-        state["history"].append(event)
-        return state
+# Aliases to satisfy any imports expecting split repository classes
+BuyerTaskRepository = BuyerAgentRepository
+BuyerAgentStateRepository = BuyerAgentRepository

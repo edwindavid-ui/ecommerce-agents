@@ -1,15 +1,17 @@
-from typing import Optional
-
+from typing import Optional, Any
 from pydantic import BaseModel, Field, field_validator
 
 
 class ProductBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=200)
-    category: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = None
-    price: float = Field(..., gt=0)
     seller_id: str = Field(..., min_length=1)
-    status: str = Field(default="active")
+    name: str = Field(..., min_length=2)
+    description: str = Field(..., min_length=1)
+    category: str = Field(..., min_length=1)
+    price: float = Field(..., gt=0)
+    currency: str = "NGN"
+    attributes: dict[str, Any] = {}
+    # active: bool = True
+    status: str = "active"  # <-- Define the field here
 
     @field_validator("status")
     @classmethod
@@ -19,17 +21,19 @@ class ProductBase(BaseModel):
             raise ValueError(f"status must be one of {sorted(allowed)}")
         return value
 
-
 class ProductCreate(ProductBase):
     pass
 
 
 class ProductUpdate(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
-    category: Optional[str] = Field(default=None, min_length=1, max_length=100)
-    description: Optional[str] = None
+    name: Optional[str] = Field(default=None, min_length=2)
+    description: Optional[str] = Field(default=None, min_length=1)
+    category: Optional[str] = Field(default=None, min_length=1)
     price: Optional[float] = Field(default=None, gt=0)
-    status: Optional[str] = None
+    currency: Optional[str] = None
+    attributes: dict[str, Any] = {}
+    # active: Optional[bool] = None
+    status: str = "active"  # <-- Define the field here
 
     @field_validator("status")
     @classmethod

@@ -1,11 +1,11 @@
-from typing import Optional
-
+from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class UserBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=200)
     email: EmailStr
+    first_name: str = Field(..., min_length=1, max_length=100)
+    last_name: str = Field(..., min_length=1, max_length=100)
     role: str = "buyer"
 
     @field_validator("role")
@@ -26,12 +26,24 @@ class UserLogin(BaseModel):
     password: str = Field(..., min_length=8, max_length=72)
 
 
+class UserPreferences(BaseModel):
+    currency: str = "NGN"
+    preferred_categories: List[str] = []
+    preferred_brands: List[str] = []
+    default_max_budget: Optional[float] = Field(default=None, ge=0)
+
+
 class UserResponse(UserBase):
     id: str
+    status: str = "active"
+    preferences: Optional[Dict[str, Any]] = {}
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    first_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    last_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
     email: Optional[EmailStr] = None
     role: Optional[str] = None
 

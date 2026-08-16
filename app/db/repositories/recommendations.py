@@ -1,6 +1,6 @@
 from typing import Any, Optional, List
 from bson import ObjectId
-from app.schemas.recommendation import RecommendationRequest, RecommendationResult
+from app.schemas.recommendation import RecommendationRequest, RecommendationResponse, RecommendationItem
 
 class RecommendationRepository:
     def __init__(self, collection: Any):

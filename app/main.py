@@ -5,24 +5,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import router as auth_router
 from app.api.buyer_agents import router as buyer_agents_router
-from app.api.jobs import router as jobs_router
 from app.api.negotiations import router as negotiations_router
 from app.api.orders import router as orders_router
 from app.api.products import router as products_router
 from app.api.seller_agents import router as seller_agents_router
 from app.core.logging import get_logger
 
-app = FastAPI(title="E-commerce Agent System")
-logger = get_logger(__name__)
-
-app.include_router(auth_router)
-app.include_router(products_router)
-app.include_router(buyer_agents_router)
-app.include_router(seller_agents_router)
-app.include_router(negotiations_router)
-app.include_router(orders_router)
-app.include_router(jobs_router)
-
+app = FastAPI(
+    title="Autonomous E-Commerce Multi-Agent System",
+    version="1.0.0",
+    description="Multi-agent negotiation and transactional e-commerce platform powered by FastAPI, MongoDB, and Gemini AI."
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -31,6 +24,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+logger = get_logger(__name__)
+app.include_router(auth_router)
+app.include_router(products_router)
+app.include_router(buyer_agents_router)
+app.include_router(seller_agents_router)
+app.include_router(negotiations_router)
+app.include_router(orders_router)
+
 
 @app.get("/")
 def read_root():
