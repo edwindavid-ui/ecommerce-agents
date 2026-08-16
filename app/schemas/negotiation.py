@@ -29,8 +29,7 @@ class NegotiationResponse(BaseModel):
     buyer_id: str
     seller_id: str
     product_id: str
-    
-    initial_price: float
+    initial_offer: float   
     current_offer: float
     final_price: Optional[float] = None
     
