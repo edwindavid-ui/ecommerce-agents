@@ -70,20 +70,6 @@ class SellerRepository:
         except Exception:
             return None
 
-    async def update_negotiation_config(self, seller_id: str, config_data: dict) -> Optional[dict]:
-        try:
-            doc = await self.collection.find_one_and_update(
-                {"_id": ObjectId(seller_id)},
-                {"$set": {"negotiation_config": config_data}},
-                return_document=True
-            )
-            if doc:
-                doc["id"] = str(doc["_id"])
-                doc.pop("_id", None)
-            return doc
-        except Exception:
-            return None
-
 class InventoryRepository:
     def __init__(self, collection: Any):
         self.collection = collection
