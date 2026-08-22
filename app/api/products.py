@@ -186,31 +186,6 @@ async def get_seller_inventory(seller_id: str):
         "inventory": inventory
     }
 
-@router.get("/sellers/me/negotiation-config")
-async def get_negotiation_config(
-    current_user_id: str = Depends(get_current_user_id)
-):
-    seller = await seller_repo.get_seller_by_user_id(current_user_id)
-    if not seller:
-        raise HTTPException(status_code=404, detail="Seller profile not found")
-    return {"negotiation_config": seller.get("negotiation_config", {})}
-
-@router.put("/sellers/me/negotiation-config")
-async def update_negotiation_config(
-    payload: SellerNegotiationConfig, 
-    current_user_id: str = Depends(get_current_user_id)
-):
-    seller = await seller_repo.get_seller_by_user_id(current_user_id)
-    if not seller:
-        raise HTTPException(status_code=404, detail="Seller profile not found")
-    
-    config_data = payload.model_dump()
-    updated = await seller_repo.update_negotiation_config(seller["id"], config_data)
-    return {
-        "message": "Negotiation configuration updated successfully",
-        "negotiation_config": updated.get("negotiation_config")
-    }
-
 
 # --- Inventory API ---
 
