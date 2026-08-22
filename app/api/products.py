@@ -13,8 +13,7 @@ from app.schemas.seller import (
     InventoryUpdate, 
     InventoryReservation, 
     InventoryRelease, 
-    SellerUpdate, 
-    SellerNegotiationConfig
+    SellerUpdate
 )
 from app.services.recommendation_service import RecommendationService
 from app.services.seller_service import SellerService, InventoryService
