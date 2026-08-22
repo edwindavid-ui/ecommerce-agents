@@ -80,26 +80,27 @@ class SellerAgentService:
             return {"decision": "reject", "reason": "Out of stock"}
 
         # 4. Retrieve seller policy configuration from the Seller profile
-        seller = await self.seller_repo.get_seller_by_id(seller_id)
-        policy = seller.get("negotiation_config", {
-            "minimum_price": product.get("price", 0) * 0.75,
-            "target_price": product.get("price", 0),
-            "max_rounds": 5,
-            "negotiation_enabled": True
-        })
-
-        if not policy.get("negotiation_enabled", True):
+        # We assume 'agent' was already fetched at the top of the method: agent = await self.agent_repo.get_agent_by_id(agent_id)
+        
+        # Check both a nested 'configuration' dict or root-level agent keys depending on your schema
+        policy = agent.get("configuration", {})
+        
+        negotiation_enabled = policy.get("negotiation_enabled", agent.get("negotiation_enabled", True))
+        if not negotiation_enabled:
             await self.negotiation_service.reject_negotiation(negotiation_id)
-            return {"decision": "reject", "reason": "Negotiations are disabled for this seller."}
+            return {"decision": "reject", "reason": "Negotiations are disabled for this agent."}
 
         offer_price = neg["current_offer"]
-        min_price = policy.get("minimum_price", product.get("price", 0) * 0.75)
-        target_price = policy.get("target_price", product.get("price", 0))
+        
+        # Set boundaries based on the agent's specific rules, falling back to product defaults if missing
+        min_price = policy.get("minimum_price", agent.get("minimum_price", product.get("price", 0) * 0.75))
+        target_price = policy.get("target_price", agent.get("target_price", product.get("price", 0)))
+        
         product_name = product.get("title", "Item")
 
         # Validate internal policy boundaries
         if min_price > target_price:
-            raise ValueError("Seller minimum price cannot be greater than target price")
+            raise ValueError("Seller agent minimum price cannot be greater than target price")
 
         # 5. Hard Constraint: Reject immediately if below absolute minimum
         if offer_price < min_price:
