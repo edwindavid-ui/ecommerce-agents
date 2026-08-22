@@ -77,6 +77,8 @@ class SellerAgentService:
         if not inventory_docs or inventory_docs[0].get("quantity", 0) <= 0:
             await self.negotiation_service.reject_negotiation(negotiation_id)
             await self.agent_repo.add_event(agent_id, "out_of_stock_rejection", f"Rejected negotiation {negotiation_id} due to zero inventory stock.")
+            # Add this right after the decision logic:
+            print(f"--> SELLER AGENT DECISION: {decision} | REASON: {reason}")
             return {"decision": "reject", "reason": "Out of stock"}
 
         # 4. Retrieve seller policy configuration from the Seller profile
@@ -88,6 +90,8 @@ class SellerAgentService:
         negotiation_enabled = policy.get("negotiation_enabled", agent.get("negotiation_enabled", True))
         if not negotiation_enabled:
             await self.negotiation_service.reject_negotiation(negotiation_id)
+            # Add this right after the decision logic:
+            print(f"--> SELLER AGENT DECISION: {decision} | REASON: {reason}")
             return {"decision": "reject", "reason": "Negotiations are disabled for this agent."}
 
         offer_price = neg["current_offer"]
@@ -106,6 +110,8 @@ class SellerAgentService:
         if offer_price < min_price:
             await self.negotiation_service.reject_negotiation(negotiation_id)
             await self.agent_repo.add_event(agent_id, "offer_rejected", f"Offer ₦{offer_price:,.2f} is below minimum price threshold (₦{min_price:,.2f}).")
+            # Add this right after the decision logic:
+            print(f"--> SELLER AGENT DECISION: {decision} | REASON: {reason}")
             return {
                 "decision": "reject",
                 "reasoning": f"Offer ₦{offer_price:,.2f} is below the absolute minimum acceptable price (₦{min_price:,.2f}).",
@@ -117,6 +123,8 @@ class SellerAgentService:
         if offer_price >= target_price:
             await self.negotiation_service.accept_offer(negotiation_id)
             await self.agent_repo.add_event(agent_id, "offer_accepted", f"Offer ₦{offer_price:,.2f} meets or exceeds target price (₦{target_price:,.2f}).")
+            # Add this right after the decision logic:
+            print(f"--> SELLER AGENT DECISION: {decision} | REASON: {reason}")
             return {
                 "decision": "accept",
                 "reasoning": f"Offer ₦{offer_price:,.2f} meets or exceeds the seller's target price (₦{target_price:,.2f}).",
