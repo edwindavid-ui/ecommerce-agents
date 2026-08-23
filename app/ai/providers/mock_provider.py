@@ -92,27 +92,23 @@ class GeminiProvider(BaseLLMProvider):
 
     @staticmethod
     def _parse_response(text: str) -> dict:
-        """
-        Parse Gemini response text into structured format.
-        Expects JSON-like structure in the response.
-        """
+        """Parse Gemini response text into structured format."""
+        import re, json
         
         # Try to extract JSON from the response
         json_match = re.search(r'\{.*\}', text, re.DOTALL)
         if json_match:
             try:
                 parsed = json.loads(json_match.group())
-                return {
-                    "reasoning": parsed.get("reasoning", text[:500]),
-                    "decision": parsed.get("decision", "PROCEED"),
-                    "confidence": float(parsed.get("confidence", 0.7)),
-                }
+                # Return the entire parsed dictionary dynamically!
+                return parsed
             except (json.JSONDecodeError, ValueError):
                 pass
-        
-        # Fallback: extract from text patterns
+                
+        # Fallback if the AI completely fails to output JSON
         return {
             "reasoning": text[:500],
-            "decision": "PROCEED",
-            "confidence": 0.7,
+            "decision": "counter",
+            "counter_price": None, # Explicitly pass None so the math fallback catches it
+            "confidence": 0.7
         }
