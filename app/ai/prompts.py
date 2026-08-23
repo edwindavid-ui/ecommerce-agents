@@ -39,6 +39,10 @@ Buyer's Current Offer: ${buyer_offer}
 Seller Minimum Price: ${seller_min}
 Seller Target Price: ${seller_target}
 
-Determine the best counter-offer price and reasoning.
-Return your suggested price, reasoning, and confidence.
+CRITICAL: You MUST respond ONLY with a valid JSON object. Do not include markdown formatting.
+You must use exactly these keys:
+- "counter_price": (a numeric float between the buyer offer and your target)
+- "reasoning": (a short string message explaining the price to the buyer)
+- "confidence": (a numeric float between 0 and 1)
+- "decision": "counter"
 """
