@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 class StructuredResponse(BaseModel):
     # Make negotiation fields optional with default fallbacks
