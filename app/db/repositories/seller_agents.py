@@ -33,15 +33,18 @@ class SellerAgentRepository:
         except Exception:
             return None
 
-    async def get_agent_by_seller_id(self, seller_id: str) -> Optional[dict]:
+    async def get_agents_by_seller_id(self, seller_id: str) -> List[dict]:
         try:
-            doc = await self.collection.find_one({"seller_id": seller_id})
-            if doc:
+            cursor = self.collection.find({"seller_id": seller_id})
+            docs = await cursor.to_list(length=100)
+            agents = []
+            for doc in docs:
                 doc["id"] = str(doc["_id"])
                 doc.pop("_id", None)
-            return doc
+                agents.append(doc)
+            return agents
         except Exception:
-            return None
+            return []
 
     async def update_status(self, agent_id: str, status: str, extra_updates: Optional[dict] = None) -> Optional[dict]:
         try:
