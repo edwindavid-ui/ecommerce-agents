@@ -59,6 +59,20 @@ async def create_seller_agent(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return {"message": "Seller agent created successfully", "agent": result}
 
+@router.get("/seller/me", status_code=status.HTTP_200_OK)
+async def list_my_seller_agents(current_user_id: str = Depends(get_current_user_id)):
+    """Retrieve all seller agents created by the authenticated seller."""
+    # 1. Fetch the seller profile for the authenticated user
+    # (Since you used seller_repo in your create route, it is already imported!)
+    seller = await seller_repo.get_seller_by_user_id(current_user_id)
+    if not seller:
+        raise HTTPException(status_code=404, detail="Seller profile not found")
+
+    # 2. Fetch all agents linked to this seller_id
+    # Ensure seller_agent_repo is initialized at the top of your file!
+    agents = await seller_agent_repo.get_agents_by_seller_id(seller["id"])
+    
+    return agents or []
 
 @router.get("/{agent_id}", status_code=status.HTTP_200_OK)
 async def get_seller_agent(agent_id: str):
