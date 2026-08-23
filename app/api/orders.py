@@ -66,21 +66,20 @@ async def update_order_status(
 @router.get("/seller/me", status_code=status.HTTP_200_OK)
 async def list_my_seller_orders(current_user_id: str = Depends(get_current_user_id)):
     """List all orders belonging to the authenticated seller."""
-    # 1. First, find the seller profile attached to this user
-    # Note: Ensure seller_repo is initialized at the top of your orders.py file!
     seller = await seller_repo.get_seller_by_user_id(current_user_id)
     if not seller:
         raise HTTPException(status_code=404, detail="Seller profile not found for this user")
         
-    # 2. Fetch orders using the seller's ID
-    orders = await order_repo.get_orders_by_seller(seller["id"])
+    # Using the correct method name from your repository!
+    orders = await order_repo.get_by_seller_id(seller["id"])
     
-    # 3. Return the orders, or an empty list if none exist.
     return orders or []
 
 
 @router.get("/seller/{seller_id}", status_code=status.HTTP_200_OK)
 async def list_orders_by_seller_id(seller_id: str):
     """List all orders for a specific seller ID."""
-    orders = await order_repo.get_orders_by_seller(seller_id)
+    # Using the correct method name from your repository!
+    orders = await order_repo.get_by_seller_id(seller_id)
+    
     return orders or []
