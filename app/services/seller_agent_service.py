@@ -133,39 +133,52 @@ class SellerAgentService:
             }
 
         # 7. Intermediate Range: Delegate to Gemini AI via AIService for intelligent negotiation reasoning
-        ai_evaluation = await self.ai_service.evaluate_offer_as_seller(
-            offer_price=offer_price,
-            min_price=min_price,
-            product_name=product_name
-        )
+# --- 1. ALGORITHMIC GUARDRAILS (Execute BEFORE calling AI) ---
+        if offer_price >= target_price:
+            await self.negotiation_service.accept_offer(negotiation_id)
+            await self.agent_repo.add_event(agent_id, "offer_accepted", "Offer met or exceeded target price.")
+            return {"decision": "accept", "reason": "Offer met target price."}
 
-        # If Gemini decides to counter, generate and dispatch the counter-offer
-        if ai_evaluation.get("decision") == "counter":
+        if offer_price < min_price:
+            await self.negotiation_service.reject_negotiation(negotiation_id)
+            await self.agent_repo.add_event(agent_id, "offer_rejected", "Offer was below minimum acceptable price.")
+            return {"decision": "reject", "reason": "Offer below minimum threshold."}
+
+        # --- 2. INTERMEDIATE RANGE: FORCE A COUNTER-OFFER ---
+        # If we reach this line, the offer is mathematically between min and target.
+        # We completely skip asking the AI "what" to do, and just ask it for a price/message.
+        
+        try:
+            # Only ONE API call to save rate limits
             counter_result = await self.ai_service.generate_counter_offer(
                 buyer_offer=offer_price,
                 seller_min=min_price,
                 seller_target=target_price
             )
-            counter_price = counter_result.get("counter_price", round((offer_price + target_price) / 2, 2))
+            counter_price = counter_result.get("counter_price")
+            reasoning = counter_result.get("reasoning", "Counter-offer proposed by AI agent.")
             
-            counter_payload = OfferCreate(
-                price=counter_price, 
-                message=counter_result.get("reasoning", "Counter-offer proposed by AI agent.")
-            )
-            await self.negotiation_service.submit_offer(negotiation_id, sender="seller", offer=counter_payload)
-            await self.agent_repo.add_event(agent_id, "counter_offer_sent", f"Counter-offer dispatched at ₦{counter_price:,.2f}")
-            
-            return {
-                "decision": "counter",
-                "counter_price": counter_price,
-                "reasoning": counter_result.get("reasoning")
-            }
+            # Safety check: Prevent AI hallucinations from countering below your min_price
+            if not counter_price or counter_price < min_price:
+                counter_price = round((offer_price + target_price) / 2, 2)
+                
+        except Exception as e:
+            # 429 Rate Limit Fallback: If Gemini is overwhelmed, do the math instantly
+            print(f"--> AI API fallback triggered: {e}", flush=True)
+            counter_price = round((offer_price + target_price) / 2, 2)
+            reasoning = "I can't accept the current offer, but how about this price?"
 
-        elif ai_evaluation.get("decision") == "accept":
-            await self.negotiation_service.accept_offer(negotiation_id)
-            await self.agent_repo.add_event(agent_id, "offer_accepted", "AI evaluated and accepted offer.")
-            return ai_evaluation
-        else:
-            await self.negotiation_service.reject_negotiation(negotiation_id)
-            await self.agent_repo.add_event(agent_id, "offer_rejected", "AI evaluated and rejected offer.")
-            return ai_evaluation
+        # --- 3. DISPATCH THE OFFER ---
+        counter_payload = OfferCreate(
+            price=counter_price,
+            message=reasoning
+        )
+        
+        await self.negotiation_service.submit_offer(negotiation_id, sender="seller", offer=counter_payload)
+        await self.agent_repo.add_event(agent_id, "counter_offer_sent", f"Counter-offer dispatched at ₦{counter_price:.2f}")
+
+        return {
+            "decision": "counter",
+            "counter_price": counter_price,
+            "reasoning": reasoning
+        }
