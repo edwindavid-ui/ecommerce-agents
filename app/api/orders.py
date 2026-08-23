@@ -4,7 +4,7 @@ from app.db.mongodb import database
 from app.db.repositories.orders import OrderRepository
 from app.db.repositories.negotiations import NegotiationRepository
 from app.db.repositories.products import ProductRepository
-from app.db.repositories.sellers import InventoryRepository
+from app.db.repositories.sellers import InventoryRepository, SellerRepository
 from app.services.order_service import OrderService
 from app.schemas.order import OrderCreate, OrderStatusUpdate, OrderResponse
 
@@ -14,6 +14,7 @@ order_repo = OrderRepository(collection=database.get_collection("orders"))
 negotiation_repo = NegotiationRepository(collection=database.get_collection("negotiations"))
 product_repo = ProductRepository(collection=database.get_collection("products"))
 inventory_repo = InventoryRepository(collection=database.get_collection("inventory"))
+seller_repo = SellerRepository(collection=database.get_collection("sellers"))
 
 order_service = OrderService(
     order_repo=order_repo,
