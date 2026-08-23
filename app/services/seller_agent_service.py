@@ -97,7 +97,7 @@ class SellerAgentService:
         offer_price = neg["current_offer"]
         
         # Set boundaries based on the agent's specific rules, falling back to product defaults if missing
-        min_price = policy.get("minimum_price", agent.get("minimum_price", product.get("price", 0) * 0.75))
+        min_price = policy.get("min_price", agent.get("min_price", product.get("price", 0) * 0.75))
         target_price = policy.get("target_price", agent.get("target_price", product.get("price", 0)))
         
         product_name = product.get("title", "Item")
