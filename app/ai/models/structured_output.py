@@ -2,10 +2,17 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 class StructuredResponse(BaseModel):
-    reasoning: str = Field(..., min_length=1, max_length=1000)
-    decision: str = Field(..., min_length=1, max_length=100)
-    confidence: float = Field(..., ge=0.0, le=1.0)
-    counter_price: Optional[float] = None   
+    # Make negotiation fields optional with default fallbacks
+    reasoning: Optional[str] = None
+    decision: Optional[str] = None
+    confidence: Optional[float] = 0.7
+    counter_price: Optional[float] = None
+    
+    # Add support for recommendation rankings
+    rankings: Optional[List[Dict[str, Any]]] = None
+
+    class Config:
+        extra = "allow"
 
 class OfferResponse(BaseModel):
     reasoning: str = Field(..., min_length=1, max_length=1000)
