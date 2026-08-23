@@ -95,20 +95,17 @@ class GeminiProvider(BaseLLMProvider):
         """Parse Gemini response text into structured format."""
         import re, json
         
-        # Try to extract JSON from the response
+        # Extract JSON block from markdown or raw text
         json_match = re.search(r'\{.*\}', text, re.DOTALL)
         if json_match:
             try:
-                parsed = json.loads(json_match.group())
-                # Return the entire parsed dictionary dynamically!
-                return parsed
+                return json.loads(json_match.group())
             except (json.JSONDecodeError, ValueError):
                 pass
                 
-        # Fallback if the AI completely fails to output JSON
+        # Fallback if no valid JSON is found
         return {
             "reasoning": text[:500],
-            "decision": "counter",
-            "counter_price": None, # Explicitly pass None so the math fallback catches it
+            "decision": "PROCEED",
             "confidence": 0.7
         }
