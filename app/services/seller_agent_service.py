@@ -25,16 +25,19 @@ class SellerAgentService:
         self.negotiation_service = negotiation_service
         self.ai_service = ai_service or AIService()
 
-    async def create_agent(self, seller_id: str, agent_data: SellerAgentCreate) -> dict:
+async def create_agent(self, seller_id: str, agent_data: SellerAgentCreate) -> dict:
         """Create a new seller agent linked to a specific seller profile."""
-        existing = await self.agent_repo.get_agent_by_seller_id(seller_id)
-        if existing:
-            raise ValueError("Seller agent already exists for this seller profile")
+        
+        existing_agents = await self.agent_repo.get_agents_by_seller_id(seller_id)
+        
+        for agent in existing_agents:
+            if agent.get("product_id") == getattr(agent_data, "product_id", None):
+                raise ValueError("An AI agent is already managing negotiations for this specific product.")
 
         agent_dict = agent_data.model_dump()
         created = await self.agent_repo.create_agent(seller_id, agent_dict)
         return created
-
+    
     async def get_agent(self, agent_id: str) -> dict:
         """Retrieve a seller agent by ID."""
         agent = await self.agent_repo.get_agent(agent_id)
