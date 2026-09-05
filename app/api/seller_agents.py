@@ -59,6 +59,16 @@ async def create_seller_agent(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return {"message": "Seller agent created successfully", "agent": result}
 
+@router.get("", status_code=status.HTTP_200_OK)
+async def list_agents(seller_id: Optional[str] = Query(None, description="Filter agents by seller ID")):
+    """Retrieve a list of seller agents, optionally filtered by a seller_id query parameter."""
+    if seller_id:
+        # Uses the plural method we fixed earlier!
+        agents = await agent_repo.get_agents_by_seller_id(seller_id)
+        return agents or []
+        
+    return []
+
 @router.get("/seller/me", status_code=status.HTTP_200_OK)
 async def list_my_seller_agents(current_user_id: str = Depends(get_current_user_id)):
     """Retrieve all seller agents created by the authenticated seller."""
