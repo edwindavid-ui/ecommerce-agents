@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
+from typing import Optional
 from app.db.mongodb import database
 from app.auth.deps import get_current_user_id
 
